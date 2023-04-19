@@ -9,6 +9,7 @@ from opentelemetry.sdk.trace.export import ConsoleSpanExporter, SimpleSpanProces
 from opentelemetry.semconv.trace import HttpFlavorValues, SpanAttributes
 
 from local_machine_resource_detector import LocalMachineResourceDetector
+from opentelemetry.propagate import inject
 
 # def configure_tracer(name, version):
 #     exporter = ConsoleSpanExporter()
@@ -35,6 +36,8 @@ def browse():
     with tracer.start_as_current_span(
         "web request", kind=trace.SpanKind.CLIENT
     ) as span:
+        headers = {}
+        inject(headers)
         url = "http://localhost:5000"
         span.set_attributes(
             {
@@ -44,7 +47,7 @@ def browse():
                 SpanAttributes.NET_PEER_IP: "127.0.0.1",
             }
         )
-        resp = requests.get(url)
+        resp = requests.get(url, headers=headers)
         span.set_attribute(SpanAttributes.HTTP_STATUS_CODE, resp.status_code)
 
 @tracer.start_as_current_span("add item to cart")

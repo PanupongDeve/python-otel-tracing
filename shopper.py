@@ -10,6 +10,7 @@ from opentelemetry.semconv.trace import HttpFlavorValues, SpanAttributes
 
 from local_machine_resource_detector import LocalMachineResourceDetector
 from opentelemetry.propagate import inject
+from opentelemetry.trace import Status, StatusCode
 
 # def configure_tracer(name, version):
 #     exporter = ConsoleSpanExporter()
@@ -38,17 +39,28 @@ def browse():
     ) as span:
         headers = {}
         inject(headers)
-        url = "http://localhost:5000/products"
-        span.set_attributes(
-            {
-                SpanAttributes.HTTP_METHOD: "GET",
-                SpanAttributes.HTTP_FLAVOR: str(HttpFlavorValues.HTTP_1_1),
-                SpanAttributes.HTTP_URL: url,
-                SpanAttributes.NET_PEER_IP: "127.0.0.1",
+        try:
+            url = "http://localhost:5000/products"
+            span.set_attributes(
+                {
+                    SpanAttributes.HTTP_METHOD: "GET",
+                    SpanAttributes.HTTP_FLAVOR: str(HttpFlavorValues.HTTP_1_1),
+                    SpanAttributes.HTTP_URL: url,
+                    SpanAttributes.NET_PEER_IP: "127.0.0.1",
+                }
+            )
+            span.add_event("about to send a request")
+            resp = requests.get(url, headers=headers)
+
+            span.add_event("request sent", attributes={"url": url})
+            span.set_attribute(SpanAttributes.HTTP_STATUS_CODE, resp.status_code)
+            span.set_status(Status(StatusCode.OK))
+        except Exception as err:
+            attributes = {
+                SpanAttributes.EXCEPTION_MESSAGE: str(err),
             }
-        )
-        resp = requests.get(url, headers=headers)
-        span.set_attribute(SpanAttributes.HTTP_STATUS_CODE, resp.status_code)
+            span.add_event("exception", attributes=attributes)
+            span.set_status(Status(StatusCode.ERROR, "status code: {}", str(err)))
 
 @tracer.start_as_current_span("add item to cart")
 def add_item_to_cart(item, quantity):

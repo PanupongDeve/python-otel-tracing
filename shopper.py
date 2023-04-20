@@ -38,7 +38,7 @@ def browse():
     ) as span:
         headers = {}
         inject(headers)
-        url = "http://localhost:5000"
+        url = "http://localhost:5000/products"
         span.set_attributes(
             {
                 SpanAttributes.HTTP_METHOD: "GET",

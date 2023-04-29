@@ -6,6 +6,12 @@ from opentelemetry.semconv.resource import ResourceAttributes
 from local_machine_resource_detector import LocalMachineResourceDetector
 from flask import request
 from opentelemetry.semconv.trace import SpanAttributes
+from opentelemetry.metrics import get_meter_provider, set_meter_provider
+from opentelemetry.sdk.metrics import MeterProvider
+from opentelemetry.sdk.metrics.export import (
+    ConsoleMetricExporter,
+    PeriodicExportingMetricReader
+)
 
 def configure_tracer(name, version):
     exporter = ConsoleSpanExporter()
@@ -36,4 +42,26 @@ def set_span_attributes_from_flask():
             SpanAttributes.HTTP_TARGET: request.path,
             SpanAttributes.HTTP_CLIENT_IP: request.remote_addr
         }
+    )
+
+def configure_meter(name, version):
+    exporter = ConsoleMetricExporter()
+    reader = PeriodicExportingMetricReader(exporter, export_interval_millis=5000)
+    local_resource = LocalMachineResourceDetector().detect()
+    resource = local_resource.merge(
+        Resource.create(
+            {
+                ResourceAttributes.SERVICE_NAME: name,
+                ResourceAttributes.SERVICE_VERSION: version,
+            }
+        )
+    )
+
+    provider = MeterProvider(metric_readers=[reader], resource=resource)
+    set_meter_provider(provider)
+    schema_url = "https://opentelemetry.io/schemas/1.9.0"
+    return get_meter_provider().get_meter(
+        name=name,
+        version=version,
+        schema_url=schema_url
     )

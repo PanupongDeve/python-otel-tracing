@@ -3,7 +3,7 @@ from flask import Flask, request
 from opentelemetry import trace
 from opentelemetry.semconv.trace import HttpFlavorValues, SpanAttributes
 from opentelemetry.trace import SpanKind
-from common import configure_tracer
+from common import configure_tracer, configure_meter
 from opentelemetry import context
 from opentelemetry.propagate import extract, inject, set_global_textmap
 from opentelemetry.propagators.b3 import B3MultiFormat
@@ -13,7 +13,14 @@ from common import set_span_attributes_from_flask
 
 
 
-tracer = configure_tracer("0.1.2", "grocery-store")
+tracer = configure_tracer("grocery-store", "0.1.2")
+meter = configure_meter("grocery-store", "0.1.2")
+request_counter = meter.create_counter(
+    name="requests",
+    unit="request",
+    description="Total number of requests"
+)
+
 app = Flask(__name__)
 
 set_global_textmap(CompositePropagator([tracecontext.TraceContextTextMapPropagator(), B3MultiFormat()]))
@@ -24,6 +31,11 @@ def before_request_func():
     print("before request doing...................")
     token = context.attach(extract(request.headers))
     request.environ["context_token"] = token
+
+@app.after_request
+def after_request_func(response):
+    request_counter.add(1, {"code": response.status_code})
+    return response
 
 @app.teardown_request
 def teardown_request_func(err):

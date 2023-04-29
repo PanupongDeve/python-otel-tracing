@@ -32,9 +32,11 @@ def configure_tracer(name, version):
 
 def set_span_attributes_from_flask():
     span = trace.get_current_span()
+    protocal = request.environ.get('SERVER_PROTOCOL')
+    print("--------------- protocal ------------->", protocal)
     span.set_attributes(
         {
-            SpanAttributes.HTTP_FLAVOR: request.environ.get("SERVER_PROTOCAL"),
+            SpanAttributes.HTTP_FLAVOR: protocal,
             SpanAttributes.HTTP_METHOD: request.method,
             SpanAttributes.HTTP_USER_AGENT: str(request.user_agent),
             SpanAttributes.HTTP_HOST: request.host,

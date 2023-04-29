@@ -1,4 +1,5 @@
 import requests
+import time
 from flask import Flask, request
 from opentelemetry import trace
 from opentelemetry.semconv.trace import HttpFlavorValues, SpanAttributes
@@ -15,10 +16,23 @@ from common import set_span_attributes_from_flask
 
 tracer = configure_tracer("grocery-store", "0.1.2")
 meter = configure_meter("grocery-store", "0.1.2")
+
 request_counter = meter.create_counter(
     name="requests",
     unit="request",
     description="Total number of requests"
+)
+
+total_duration_histo = meter.create_histogram(
+    name="duration",
+    description="request duration",
+    unit="ms",
+)
+
+upstream_duration_histo = meter.create_histogram(
+    name="upstream_request_duration",
+    description="duration of upstream requests",
+    unit="ms",
 )
 
 app = Flask(__name__)
@@ -31,10 +45,13 @@ def before_request_func():
     print("before request doing...................")
     token = context.attach(extract(request.headers))
     request.environ["context_token"] = token
+    request.environ["start_time"] = time.time_ns()
 
 @app.after_request
 def after_request_func(response):
     request_counter.add(1, {"code": response.status_code})
+    duration = (time.time_ns() - request.environ["start_time"])/1e6
+    total_duration_histo.record(duration)
     return response
 
 @app.teardown_request
@@ -80,7 +97,10 @@ def products():
 
         headers = {}
         inject(headers)
+        start = time.time_ns()
         resp = requests.get(url, headers=headers)
+        duration = (time.time_ns() - start)/1e6
+        upstream_duration_histo.record(duration)
         return resp.text
 
 if __name__ == "__main__":

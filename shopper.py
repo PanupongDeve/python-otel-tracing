@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import requests
+import time
 from common import configure_tracer, configure_meter
 
 from opentelemetry import context, trace
@@ -11,6 +12,9 @@ from opentelemetry.semconv.trace import HttpFlavorValues, SpanAttributes
 from local_machine_resource_detector import LocalMachineResourceDetector
 from opentelemetry.propagate import inject
 from opentelemetry.trace import Status, StatusCode
+
+
+
 
 # def configure_tracer(name, version):
 #     exporter = ConsoleSpanExporter()
@@ -32,6 +36,18 @@ from opentelemetry.trace import Status, StatusCode
 tracer = configure_tracer("shopper", "0.1.2")
 meter = configure_meter("shopper", "0.1.2")
 
+total_duration_histo = meter.create_histogram(
+    name="duration",
+    description="request duration",
+    unit="ms",
+)
+
+upstream_duration_histo = meter.create_histogram(
+    name="upstream_request_duration",
+    description="duration of upstream requests",
+    unit="ms",
+)
+
 @tracer.start_as_current_span("browse")
 def browse():
     print("visiting the grocery store")
@@ -51,7 +67,10 @@ def browse():
                 }
             )
             span.add_event("about to send a request")
+            start = time.time_ns()
             resp = requests.get(url, headers=headers)
+            duration = (time.time_ns() - start)/1e6
+            upstream_duration_histo.record(duration)
 
             span.add_event("request sent", attributes={"url": url})
             span.set_attribute(SpanAttributes.HTTP_STATUS_CODE, resp.status_code)
@@ -74,7 +93,10 @@ def add_item_to_cart(item, quantity):
 
 @tracer.start_as_current_span("visit store")
 def visit_store():
+    start = time.time_ns()
     browse()
+    duration = (time.time_ns() - start)/1e6
+    total_duration_histo.record(duration)
 
 
 if __name__ == "__main__":
